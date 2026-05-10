@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+
+# Environment
+.env
+
+# Models
+models/
+*.zip
+
+# MLflow
+mlruns/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Logs
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

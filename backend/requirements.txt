@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+gymnasium
+stable-baselines3
+torch
+numpy
+pandas
+mlflow
+websockets
+python-dotenv
+pydantic
+pydantic-settings
+pytest
+httpx
+black
+ruff
+pre-commit
