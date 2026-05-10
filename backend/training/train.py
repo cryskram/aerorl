@@ -123,7 +123,7 @@ def train() -> None:
         gamma=settings.gamma,
         gae_lambda=settings.gae_lambda,
         clip_range=settings.clip_range,
-        ent_coef=settings.ent_coef,
+        ent_coef=0.05,
         verbose=1,
         tensorboard_log="./logs/tensorboard/",
     )
@@ -186,10 +186,6 @@ def train() -> None:
             "training/elapsed_time_seconds",
             elapsed_time,
         )
-
-        # -------------------------------------------------------------
-        # Save models
-        # -------------------------------------------------------------
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 

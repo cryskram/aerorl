@@ -4,7 +4,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AeroRL — Autonomous Drone Path Finder",
+  title: "AeroRL - Autonomous Drone Path Finder",
   description:
     "Reinforcement Learning powered autonomous drone navigation dashboard.",
 };

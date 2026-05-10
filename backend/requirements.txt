@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 gymnasium
-stable-baselines3
+stable-baselines3[extra]
 torch
 numpy
 pandas
@@ -15,3 +15,4 @@ httpx
 black
 ruff
 pre-commit
+tensorboard

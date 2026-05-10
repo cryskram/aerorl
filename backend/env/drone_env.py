@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import math
+import random
 from typing import Any
 
 import gymnasium as gym
@@ -9,15 +9,19 @@ from gymnasium import spaces
 
 
 class DroneEnv(gym.Env):
+    """
+    AeroRL Drone Environment
 
-    metadata = {"render_modes": ["ansi"]}
+    Features:
+    - Dynamic obstacle generation
+    - PPO-friendly reward shaping
+    - Oscillation prevention
+    - Repeat-state penalties
+    - Distance shaping rewards
+    - Goal seeking incentives
+    """
 
-    ACTIONS = {
-        0: (-1, 0),  # UP
-        1: (1, 0),  # DOWN
-        2: (0, -1),  # LEFT
-        3: (0, 1),  # RIGHT
-    }
+    metadata = {"render_modes": ["human"]}
 
     ACTION_NAMES = {
         0: "UP",
@@ -29,249 +33,261 @@ class DroneEnv(gym.Env):
     def __init__(
         self,
         grid_size: int = 10,
-        obstacle_count: int = 10,
+        obstacle_count: int = 3,
         max_steps: int = 200,
-        render_mode: str | None = "ansi",
     ) -> None:
         super().__init__()
 
         self.grid_size = grid_size
         self.obstacle_count = obstacle_count
         self.max_steps = max_steps
-        self.render_mode = render_mode
 
         self.action_space = spaces.Discrete(4)
 
-        obs_low = np.array(
-            [0, 0, 0, 0, -grid_size, -grid_size, 0, 0],
-            dtype=np.float32,
-        )
-
-        obs_high = np.array(
-            [
-                grid_size - 1,
-                grid_size - 1,
-                grid_size - 1,
-                grid_size - 1,
-                grid_size,
-                grid_size,
-                np.sqrt(2 * (grid_size**2)),
-                np.sqrt(2 * (grid_size**2)),
-            ],
-            dtype=np.float32,
-        )
-
         self.observation_space = spaces.Box(
-            low=obs_low,
-            high=obs_high,
+            low=-1.0,
+            high=1.0,
+            shape=(8,),
             dtype=np.float32,
         )
 
-        self.drone_pos = np.array([0, 0], dtype=np.int32)
-        self.goal_pos = np.array(
-            [grid_size - 1, grid_size - 1],
-            dtype=np.int32,
-        )
+        self.drone_pos: np.ndarray | None = None
+        self.goal_pos: np.ndarray | None = None
 
-        self.obstacles: list[tuple[int, int]] = []
+        self.obstacles: list[np.ndarray] = []
+
         self.current_step = 0
+
         self.previous_distance = 0.0
 
-    def _generate_obstacles(self) -> list[tuple[int, int]]:
-
-        forbidden_positions = {
-            (0, 0),
-            (0, 1),
-            (1, 0),
-            (1, 1),
-            (self.grid_size - 1, self.grid_size - 1),
-            (self.grid_size - 2, self.grid_size - 1),
-            (self.grid_size - 1, self.grid_size - 2),
-            (self.grid_size - 2, self.grid_size - 2),
-        }
-
-        obstacles = set()
-
-        while len(obstacles) < self.obstacle_count:
-            x = self.np_random.integers(0, self.grid_size)
-            y = self.np_random.integers(0, self.grid_size)
-
-            position = (int(x), int(y))
-
-            if position not in forbidden_positions:
-                obstacles.add(position)
-
-        return list(obstacles)
-
-    def _distance_to_goal(self) -> float:
-
-        return float(np.linalg.norm(self.goal_pos - self.drone_pos))
-
-    def _min_obstacle_distance(self) -> float:
-
-        if not self.obstacles:
-            return float(self.grid_size)
-
-        distances = [math.dist(self.drone_pos, obstacle) for obstacle in self.obstacles]
-
-        return float(min(distances))
-
-    def _get_obs(self) -> np.ndarray:
-
-        relative = self.goal_pos - self.drone_pos
-
-        observation = np.array(
-            [
-                self.drone_pos[0],
-                self.drone_pos[1],
-                self.goal_pos[0],
-                self.goal_pos[1],
-                relative[0],
-                relative[1],
-                self._distance_to_goal(),
-                self._min_obstacle_distance(),
-            ],
-            dtype=np.float32,
-        )
-
-        return observation
-
-    def _get_info(self) -> dict[str, Any]:
-
-        return {
-            "current_step": self.current_step,
-            "distance_to_goal": self._distance_to_goal(),
-            "min_obstacle_distance": self._min_obstacle_distance(),
-        }
+        self.visited_positions = set()
+        self.last_positions: list[tuple[int, int]] = []
 
     def reset(
         self,
         *,
         seed: int | None = None,
         options: dict[str, Any] | None = None,
-    ) -> tuple[np.ndarray, dict[str, Any]]:
-
+    ):
         super().reset(seed=seed)
 
-        self.drone_pos = np.array([0, 0], dtype=np.int32)
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
 
-        self.goal_pos = np.array(
-            [self.grid_size - 1, self.grid_size - 1],
+        self.current_step = 0
+
+        self.visited_positions = set()
+        self.last_positions = []
+
+        self.drone_pos = np.array(
+            [0, 0],
             dtype=np.int32,
         )
 
-        self.obstacles = self._generate_obstacles()
+        self.goal_pos = np.array(
+            [
+                self.grid_size - 1,
+                self.grid_size - 1,
+            ],
+            dtype=np.int32,
+        )
 
-        self.current_step = 0
+        self.obstacles = []
+
+        forbidden_positions = {
+            tuple(self.drone_pos),
+            tuple(self.goal_pos),
+        }
+
+        while len(self.obstacles) < self.obstacle_count:
+            obstacle = np.array(
+                [
+                    np.random.randint(
+                        0,
+                        self.grid_size,
+                    ),
+                    np.random.randint(
+                        0,
+                        self.grid_size,
+                    ),
+                ],
+                dtype=np.int32,
+            )
+
+            obstacle_tuple = tuple(obstacle)
+
+            if obstacle_tuple not in forbidden_positions:
+                self.obstacles.append(obstacle)
+                forbidden_positions.add(obstacle_tuple)
+
         self.previous_distance = self._distance_to_goal()
 
         observation = self._get_obs()
-        info = self._get_info()
+
+        info = {
+            "distance_to_goal": (self.previous_distance),
+        }
 
         return observation, info
 
-    def step(
-        self,
-        action: int,
-    ) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
-
+    def step(self, action: int):
         self.current_step += 1
 
-        move = self.ACTIONS[action]
+        previous_position = self.drone_pos.copy()
 
-        new_position = self.drone_pos + np.array(move)
+        if action == 0:  # UP
+            self.drone_pos[0] -= 1
 
-        new_position[0] = np.clip(
-            new_position[0],
+        elif action == 1:  # DOWN
+            self.drone_pos[0] += 1
+
+        elif action == 2:  # LEFT
+            self.drone_pos[1] -= 1
+
+        elif action == 3:  # RIGHT
+            self.drone_pos[1] += 1
+
+        self.drone_pos = np.clip(
+            self.drone_pos,
             0,
             self.grid_size - 1,
         )
 
-        new_position[1] = np.clip(
-            new_position[1],
-            0,
-            self.grid_size - 1,
-        )
-
-        self.drone_pos = new_position
+        reward = -0.1
 
         terminated = False
         truncated = False
 
         current_distance = self._distance_to_goal()
 
-        reward = -0.5
-
-        distance_shaping = (self.previous_distance - current_distance) * 2
+        distance_shaping = (self.previous_distance - current_distance) * 5
 
         reward += distance_shaping
+
+        reward += 1 / (current_distance + 1)
+
+        self.previous_distance = current_distance
+
+        current_pos_tuple = tuple(self.drone_pos)
+
+        if current_pos_tuple in self.visited_positions:
+            reward -= 3
+
+        self.visited_positions.add(current_pos_tuple)
+
+        self.last_positions.append(current_pos_tuple)
+
+        if len(self.last_positions) > 6:
+            self.last_positions.pop(0)
+
+        if len(self.last_positions) >= 6 and len(set(self.last_positions)) <= 2:
+            reward -= 10
 
         min_obstacle_distance = self._min_obstacle_distance()
 
         if min_obstacle_distance < 1.5:
             reward -= 2
 
-        drone_tuple = tuple(self.drone_pos.tolist())
+        collision = any(
+            np.array_equal(
+                self.drone_pos,
+                obstacle,
+            )
+            for obstacle in self.obstacles
+        )
 
-        if drone_tuple in self.obstacles:
-            reward = -100
+        if collision:
+            reward -= 100
             terminated = True
 
-        elif np.array_equal(self.drone_pos, self.goal_pos):
-            reward = 100
+        if np.array_equal(
+            self.drone_pos,
+            self.goal_pos,
+        ):
+            reward += 100
             terminated = True
 
         if self.current_step >= self.max_steps:
             truncated = True
 
-        self.previous_distance = current_distance
-
         observation = self._get_obs()
-        info = self._get_info()
+
+        info = {
+            "distance_to_goal": (current_distance),
+            "min_obstacle_distance": (min_obstacle_distance),
+        }
 
         return (
             observation,
-            float(reward),
+            reward,
             terminated,
             truncated,
             info,
         )
 
-    def render(self) -> str:
+    def _get_obs(self) -> np.ndarray:
 
-        grid = [["." for _ in range(self.grid_size)] for _ in range(self.grid_size)]
+        relative_vector = self.goal_pos - self.drone_pos
 
-        for obstacle in self.obstacles:
-            grid[obstacle[0]][obstacle[1]] = "X"
+        distance_to_goal = self._distance_to_goal()
 
-        grid[self.goal_pos[0]][self.goal_pos[1]] = "G"
+        min_obstacle_distance = self._min_obstacle_distance()
 
-        grid[self.drone_pos[0]][self.drone_pos[1]] = "D"
+        observation = np.array(
+            [
+                self.drone_pos[0] / self.grid_size,
+                self.drone_pos[1] / self.grid_size,
+                self.goal_pos[0] / self.grid_size,
+                self.goal_pos[1] / self.grid_size,
+                relative_vector[0] / self.grid_size,
+                relative_vector[1] / self.grid_size,
+                distance_to_goal / (np.sqrt(2) * self.grid_size),
+                min_obstacle_distance / (np.sqrt(2) * self.grid_size),
+            ],
+            dtype=np.float32,
+        )
 
-        rendered = "\n".join([" ".join(row) for row in grid])
+        return observation
 
-        if self.render_mode == "ansi":
-            return rendered
+    def _distance_to_goal(
+        self,
+    ) -> float:
+        return float(np.linalg.norm(self.goal_pos - self.drone_pos))
 
-        print(rendered)
-        return rendered
+    def _min_obstacle_distance(
+        self,
+    ) -> float:
+        if not self.obstacles:
+            return float(self.grid_size)
 
-    def get_state_dict(self) -> dict[str, Any]:
+        distances = [
+            np.linalg.norm(obstacle - self.drone_pos) for obstacle in self.obstacles
+        ]
 
+        return float(min(distances))
+
+    def get_state_dict(
+        self,
+    ) -> dict[str, Any]:
         return {
             "grid_size": self.grid_size,
-            "obstacle_count": self.obstacle_count,
+            "obstacle_count": (self.obstacle_count),
             "max_steps": self.max_steps,
             "drone_pos": self.drone_pos.tolist(),
             "goal_pos": self.goal_pos.tolist(),
-            "obstacles": [list(obs) for obs in self.obstacles],
-            "current_step": self.current_step,
+            "obstacles": [obstacle.tolist() for obstacle in self.obstacles],
+            "current_step": (self.current_step),
         }
 
-    def set_state(self, state: dict[str, Any]) -> None:
-
+    def set_state_dict(
+        self,
+        state: dict[str, Any],
+    ) -> None:
         self.grid_size = state["grid_size"]
+
         self.obstacle_count = state["obstacle_count"]
+
         self.max_steps = state["max_steps"]
 
         self.drone_pos = np.array(
@@ -284,8 +300,42 @@ class DroneEnv(gym.Env):
             dtype=np.int32,
         )
 
-        self.obstacles = [tuple(obstacle) for obstacle in state["obstacles"]]
+        self.obstacles = [
+            np.array(
+                obstacle,
+                dtype=np.int32,
+            )
+            for obstacle in state["obstacles"]
+        ]
 
         self.current_step = state["current_step"]
 
-        self.previous_distance = self._distance_to_goal()
+    def render(self):
+        grid = np.full(
+            (
+                self.grid_size,
+                self.grid_size,
+            ),
+            ".",
+            dtype=object,
+        )
+
+        for obstacle in self.obstacles:
+            grid[
+                obstacle[0],
+                obstacle[1],
+            ] = "X"
+
+        grid[
+            self.goal_pos[0],
+            self.goal_pos[1],
+        ] = "G"
+
+        grid[
+            self.drone_pos[0],
+            self.drone_pos[1],
+        ] = "D"
+
+        print("\n".join(" ".join(row) for row in grid))
+
+        print()

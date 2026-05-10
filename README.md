@@ -1,4 +1,4 @@
-# AeroRL — Autonomous Drone Path Finder
+# AeroRL - Autonomous Drone Path Finder
 
 A production-grade Reinforcement Learning project where a drone learns
 to navigate a dynamic grid environment while avoiding obstacles using PPO.
