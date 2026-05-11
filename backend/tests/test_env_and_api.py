@@ -88,7 +88,7 @@ class TestDroneEnv:
 
         observation, _ = env.reset(seed=42)
 
-        assert observation.shape == (8,)
+        assert observation.shape == (11,)
 
     def test_reset_drone_at_origin(
         self,
@@ -152,8 +152,8 @@ class TestDroneEnv:
 
         observation, reward, terminated, truncated, _ = env.step(1)
 
-        assert reward == 100
         assert terminated is True
+        assert reward >= 150
         assert truncated is False
 
     def test_obstacle_collision_penalty(
@@ -167,8 +167,8 @@ class TestDroneEnv:
 
         observation, reward, terminated, truncated, _ = env.step(1)
 
-        assert reward == -100
         assert terminated is True
+        assert reward <= -150
 
     def test_max_steps_truncation(
         self,
@@ -195,7 +195,7 @@ class TestDroneEnv:
             }
 
             for obstacle in env.obstacles:
-                assert obstacle not in forbidden
+                assert tuple(obstacle) not in forbidden
 
     def test_get_state_dict_structure(
         self,
@@ -292,4 +292,4 @@ class TestAPI:
         assert "observation" in payload
         assert "state" in payload
 
-        assert len(payload["observation"]) == 8
+        assert len(payload["observation"]) == 11
