@@ -114,8 +114,8 @@ def train() -> None:
     eval_env = DummyVecEnv([make_env(seed=999)])
 
     model = PPO(
-        policy="MlpPolicy",
-        env=env,
+        "MlpPolicy",
+        env,
         learning_rate=settings.learning_rate,
         n_steps=settings.n_steps,
         batch_size=settings.batch_size,
@@ -123,7 +123,9 @@ def train() -> None:
         gamma=settings.gamma,
         gae_lambda=settings.gae_lambda,
         clip_range=settings.clip_range,
-        ent_coef=0.05,
+        ent_coef=settings.ent_coef,
+        normalize_advantage=True,
+        target_kl=0.02,
         verbose=1,
         tensorboard_log="./logs/tensorboard/",
     )

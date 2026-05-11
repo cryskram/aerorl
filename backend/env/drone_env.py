@@ -10,15 +10,15 @@ from gymnasium import spaces
 
 class DroneEnv(gym.Env):
     """
-    AeroRL Drone Environment
+    AeroRL Drone Environment v3
 
-    Features:
-    - Dynamic obstacle generation
-    - PPO-friendly reward shaping
+    Improvements:
+    - Directional obstacle sensing
+    - Stronger obstacle avoidance
     - Oscillation prevention
     - Repeat-state penalties
-    - Distance shaping rewards
-    - Goal seeking incentives
+    - Goal shaping rewards
+    - PPO-friendly observations
     """
 
     metadata = {"render_modes": ["human"]}
@@ -45,9 +45,9 @@ class DroneEnv(gym.Env):
         self.action_space = spaces.Discrete(4)
 
         self.observation_space = spaces.Box(
-            low=-1.0,
+            low=0.0,
             high=1.0,
-            shape=(8,),
+            shape=(11,),
             dtype=np.float32,
         )
 
@@ -61,6 +61,7 @@ class DroneEnv(gym.Env):
         self.previous_distance = 0.0
 
         self.visited_positions = set()
+
         self.last_positions: list[tuple[int, int]] = []
 
     def reset(
@@ -79,7 +80,6 @@ class DroneEnv(gym.Env):
 
         self.visited_positions = set()
         self.last_positions = []
-
         self.drone_pos = np.array(
             [0, 0],
             dtype=np.int32,
@@ -119,15 +119,14 @@ class DroneEnv(gym.Env):
 
             if obstacle_tuple not in forbidden_positions:
                 self.obstacles.append(obstacle)
+
                 forbidden_positions.add(obstacle_tuple)
 
         self.previous_distance = self._distance_to_goal()
 
         observation = self._get_obs()
 
-        info = {
-            "distance_to_goal": (self.previous_distance),
-        }
+        info = {"distance_to_goal": (self.previous_distance)}
 
         return observation, info
 
@@ -154,40 +153,72 @@ class DroneEnv(gym.Env):
             self.grid_size - 1,
         )
 
-        reward = -0.1
+        reward = -0.05
 
         terminated = False
         truncated = False
 
         current_distance = self._distance_to_goal()
 
-        distance_shaping = (self.previous_distance - current_distance) * 5
+        distance_shaping = (self.previous_distance - current_distance) * 6
 
         reward += distance_shaping
 
-        reward += 1 / (current_distance + 1)
+        reward += 2 / (current_distance + 1)
 
         self.previous_distance = current_distance
 
         current_pos_tuple = tuple(self.drone_pos)
 
         if current_pos_tuple in self.visited_positions:
-            reward -= 3
+            reward -= 5
 
         self.visited_positions.add(current_pos_tuple)
 
         self.last_positions.append(current_pos_tuple)
 
-        if len(self.last_positions) > 6:
+        if len(self.last_positions) > 8:
             self.last_positions.pop(0)
 
         if len(self.last_positions) >= 6 and len(set(self.last_positions)) <= 2:
-            reward -= 10
+            reward -= 20
+
+        obstacle_up = self._obstacle_in_direction(
+            dx=-1,
+            dy=0,
+        )
+
+        obstacle_down = self._obstacle_in_direction(
+            dx=1,
+            dy=0,
+        )
+
+        obstacle_left = self._obstacle_in_direction(
+            dx=0,
+            dy=-1,
+        )
+
+        obstacle_right = self._obstacle_in_direction(
+            dx=0,
+            dy=1,
+        )
+
+        if action == 0 and obstacle_up:
+            reward -= 15
+
+        elif action == 1 and obstacle_down:
+            reward -= 15
+
+        elif action == 2 and obstacle_left:
+            reward -= 15
+
+        elif action == 3 and obstacle_right:
+            reward -= 15
 
         min_obstacle_distance = self._min_obstacle_distance()
 
         if min_obstacle_distance < 1.5:
-            reward -= 2
+            reward -= 8
 
         collision = any(
             np.array_equal(
@@ -198,14 +229,14 @@ class DroneEnv(gym.Env):
         )
 
         if collision:
-            reward -= 100
+            reward -= 200
             terminated = True
 
         if np.array_equal(
             self.drone_pos,
             self.goal_pos,
         ):
-            reward += 100
+            reward += 150
             terminated = True
 
         if self.current_step >= self.max_steps:
@@ -227,12 +258,9 @@ class DroneEnv(gym.Env):
         )
 
     def _get_obs(self) -> np.ndarray:
-
         relative_vector = self.goal_pos - self.drone_pos
 
         distance_to_goal = self._distance_to_goal()
-
-        min_obstacle_distance = self._min_obstacle_distance()
 
         observation = np.array(
             [
@@ -242,13 +270,59 @@ class DroneEnv(gym.Env):
                 self.goal_pos[1] / self.grid_size,
                 relative_vector[0] / self.grid_size,
                 relative_vector[1] / self.grid_size,
+                float(
+                    self._obstacle_in_direction(
+                        -1,
+                        0,
+                    )
+                ),
+                float(
+                    self._obstacle_in_direction(
+                        1,
+                        0,
+                    )
+                ),
+                float(
+                    self._obstacle_in_direction(
+                        0,
+                        -1,
+                    )
+                ),
+                float(
+                    self._obstacle_in_direction(
+                        0,
+                        1,
+                    )
+                ),
                 distance_to_goal / (np.sqrt(2) * self.grid_size),
-                min_obstacle_distance / (np.sqrt(2) * self.grid_size),
             ],
             dtype=np.float32,
         )
 
         return observation
+
+    def _obstacle_in_direction(
+        self,
+        dx: int,
+        dy: int,
+    ) -> bool:
+        check_pos = self.drone_pos + np.array([dx, dy])
+
+        if (
+            check_pos[0] < 0
+            or check_pos[0] >= self.grid_size
+            or check_pos[1] < 0
+            or check_pos[1] >= self.grid_size
+        ):
+            return True
+
+        return any(
+            np.array_equal(
+                check_pos,
+                obstacle,
+            )
+            for obstacle in self.obstacles
+        )
 
     def _distance_to_goal(
         self,

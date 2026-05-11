@@ -19,7 +19,7 @@ export default function HomePage() {
 
   const [config, setConfig] = useState<SimulationConfig>({
     grid_size: 10,
-    obstacle_count: 8,
+    obstacle_count: 4,
     delay_ms: 200,
   });
 
