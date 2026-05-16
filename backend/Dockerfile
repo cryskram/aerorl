@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y \
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
 
 COPY . .
 
@@ -22,4 +22,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --retries=5 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD [ "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000" ]
+CMD [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000" ]

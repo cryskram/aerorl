@@ -23,8 +23,6 @@ logger = logging.getLogger("aerorl")
 
 @dataclass
 class AppState:
-    """Global application state."""
-
     model: PPO | None
     env: DroneEnv
     model_loaded_at: datetime | None
@@ -34,31 +32,23 @@ class AppState:
 
 
 class HealthResponse(BaseModel):
-    """Health response model."""
-
     status: str
     model_loaded: bool
     model_loaded_at: datetime | None
 
 
 class PredictResponse(BaseModel):
-    """Prediction response model."""
-
     action: int
     action_name: str
     observation: list[float]
 
 
 class SimulateRequest(BaseModel):
-    """Simulation request."""
-
     seed: int | None = None
     max_steps: int = Field(default=100, ge=1)
 
 
 class SimulateResponse(BaseModel):
-    """Simulation response."""
-
     total_reward: float
     steps: int
     reached_goal: bool
@@ -66,14 +56,10 @@ class SimulateResponse(BaseModel):
 
 
 class ResetRequest(BaseModel):
-    """Reset environment request."""
-
     seed: int | None = None
 
 
 class MetricsResponse(BaseModel):
-    """Metrics response."""
-
     total_predictions: int
     total_simulations: int
     total_goal_reached: int
@@ -82,8 +68,6 @@ class MetricsResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application startup and shutdown."""
-
     logger.info("Starting AeroRL backend...")
 
     env = DroneEnv(
@@ -152,14 +136,10 @@ app.add_middleware(
 
 
 def get_state() -> AppState:
-    """Get app state."""
-
     return app.state.state
 
 
 def ensure_model_loaded(state: AppState) -> PPO:
-    """Ensure PPO model is available."""
-
     if state.model is None:
         raise HTTPException(
             status_code=503,
@@ -174,8 +154,6 @@ def ensure_model_loaded(state: AppState) -> PPO:
     response_model=HealthResponse,
 )
 async def health() -> HealthResponse:
-    """Health check endpoint."""
-
     state = get_state()
 
     return HealthResponse(
@@ -193,8 +171,6 @@ async def predict(
     x: int = Query(..., ge=0),
     y: int = Query(..., ge=0),
 ) -> PredictResponse:
-    """Predict next action."""
-
     state = get_state()
 
     model = ensure_model_loaded(state)
@@ -226,8 +202,6 @@ async def predict(
 async def simulate(
     request: SimulateRequest,
 ) -> SimulateResponse:
-    """Run simulation episode."""
-
     state = get_state()
 
     model = ensure_model_loaded(state)
@@ -276,8 +250,6 @@ async def simulate(
 
 @app.get("/env/state")
 async def env_state() -> dict[str, Any]:
-    """Return current environment state."""
-
     state = get_state()
 
     return state.env.get_state_dict()
@@ -287,8 +259,6 @@ async def env_state() -> dict[str, Any]:
 async def env_reset(
     request: ResetRequest,
 ) -> dict[str, Any]:
-    """Reset environment."""
-
     state = get_state()
 
     observation, info = state.env.reset(
@@ -307,8 +277,6 @@ async def env_reset(
     response_model=MetricsResponse,
 )
 async def metrics() -> MetricsResponse:
-    """Return application metrics."""
-
     state = get_state()
 
     success_rate = 0.0
@@ -328,8 +296,6 @@ async def metrics() -> MetricsResponse:
 async def websocket_simulate(
     websocket: WebSocket,
 ) -> None:
-    """Live simulation websocket."""
-
     await websocket.accept()
 
     state = get_state()

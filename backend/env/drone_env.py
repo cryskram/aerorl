@@ -9,17 +9,6 @@ from gymnasium import spaces
 
 
 class DroneEnv(gym.Env):
-    """
-    AeroRL Drone Environment v3
-
-    Improvements:
-    - Directional obstacle sensing
-    - Stronger obstacle avoidance
-    - Oscillation prevention
-    - Repeat-state penalties
-    - Goal shaping rewards
-    - PPO-friendly observations
-    """
 
     metadata = {"render_modes": ["human"]}
 

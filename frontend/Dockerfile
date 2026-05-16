@@ -7,14 +7,13 @@ COPY package.json package-lock.json* ./
 RUN npm install
 
 
-
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NEXT_PUBLIC_API_URL=http://localhost:8000
-ENV NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/simulate
+ENV NEXT_PUBLIC_API_URL=http://backend:8000
+ENV NEXT_PUBLIC_WS_URL=ws://backend:8000/ws/simulate
 
 COPY --from=deps /app/node_modules ./node_modules
 
